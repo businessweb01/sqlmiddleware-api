@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use App\Helpers\IdGenerator;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Cache;
 
 class AuthController extends Controller
 
@@ -66,14 +68,69 @@ class AuthController extends Controller
     }
 
 
-   public function login(Request $request)
+    public function login(Request $request)
     {
+        $request->validate([
+            'pass_email' => 'required|email',
+            'pass_pswrd' => 'required|string',
+        ]);
+
+        $key = 'login:' . $request->ip() . ':' . $request->pass_email;
+
+        $defaultAttempts = 3;
+        $defaultPenalty = 30;
+
+        // Fetch current values or defaults
+        $attemptsLeft = Cache::get($key . ':attempts', $defaultAttempts);
+        $penalty = Cache::get($key . ':penalty', $defaultPenalty);
+
+        // Check if locked out
+        if (RateLimiter::tooManyAttempts($key, 1)) {
+            $seconds = RateLimiter::availableIn($key);
+            return response()->json([
+                'message' => "Locked out. Try again in {$seconds} seconds.",
+                'retry_after' => $seconds,
+                'unlock_time' => now()->addSeconds($seconds)->toIso8601String(),
+            ], 429);
+        }
+
         $passenger = Passenger::where('pass_email', $request->pass_email)->first();
 
         if (!$passenger || !Hash::check($request->pass_pswrd, $passenger->pass_pswrd)) {
-            return response()->json(['message' => 'Invalid credentials'], 401);
+            $attemptsLeft--;
+
+            if ($attemptsLeft <= 0) {
+                // Trigger lockout for current penalty
+                RateLimiter::hit($key, $penalty);
+
+                // Increment penalty (max cap optional: 300s)
+                $nextPenalty = min($penalty + 30, 300); // Cap at 5 minutes
+                Cache::put($key . ':penalty', $nextPenalty, now()->addMinutes(10));
+
+                // After lockout, only 1 attempt allowed
+                Cache::put($key . ':attempts', 1, now()->addMinutes(10));
+
+                return response()->json([
+                    'message' => "Too many failed attempts. Locked out for {$penalty} seconds.",
+                    'retry_after' => $penalty,
+                    'unlock_time' => now()->addSeconds($penalty)->toIso8601String(),
+                ], 429);
+            } else {
+                Cache::put($key . ':attempts', $attemptsLeft, now()->addMinutes(10));
+
+                return response()->json([
+                    'message' => 'Invalid credentials.',
+                    'attempts_left' => $attemptsLeft
+                ], 401);
+            }
         }
 
+        // ✅ SUCCESS: Reset everything
+        RateLimiter::clear($key);
+        Cache::forget($key . ':attempts');
+        Cache::forget($key . ':penalty');
+
+        // Generate and store token
         $accessToken = $passenger->createToken('passenger_token');
         $plainTextToken = $accessToken->plainTextToken;
         $hashedToken = hash('sha256', explode('|', $plainTextToken)[1]);
@@ -84,9 +141,9 @@ class AuthController extends Controller
                 'expires_at' => now()->addDays(7),
                 'last_used_at' => now(),
             ]);
-            
+
         return response()->json([
-             'access_token' => $plainTextToken,
+            'access_token' => $plainTextToken,
             'token_type' => 'Bearer',
             'passenger' => $passenger,
         ]);
