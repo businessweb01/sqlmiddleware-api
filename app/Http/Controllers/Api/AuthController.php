@@ -71,11 +71,12 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $request->validate([
-            'pass_email' => 'required|email',
+            'login_id'   => 'required|string', // can be email or contact number
             'pass_pswrd' => 'required|string',
         ]);
 
-        $key = 'login:' . $request->ip() . ':' . $request->pass_email;
+        $loginId = $request->login_id;
+        $key = 'login:' . $request->ip() . ':' . $loginId;
 
         $defaultAttempts = 3;
         $defaultPenalty = 30;
@@ -84,7 +85,6 @@ class AuthController extends Controller
         $attemptsLeft = Cache::get($key . ':attempts', $defaultAttempts);
         $penalty = Cache::get($key . ':penalty', $defaultPenalty);
 
-        // Check if locked out
         if (RateLimiter::tooManyAttempts($key, 1)) {
             $seconds = RateLimiter::availableIn($key);
             return response()->json([
@@ -94,20 +94,18 @@ class AuthController extends Controller
             ], 429);
         }
 
-        $passenger = Passenger::where('pass_email', $request->pass_email)->first();
+        // Search by email OR contact number
+        $passenger = Passenger::where('pass_email', $loginId)
+            ->orWhere('pass_cont_num', $loginId)
+            ->first();
 
         if (!$passenger || !Hash::check($request->pass_pswrd, $passenger->pass_pswrd)) {
             $attemptsLeft--;
 
             if ($attemptsLeft <= 0) {
-                // Trigger lockout for current penalty
                 RateLimiter::hit($key, $penalty);
-
-                // Increment penalty (max cap optional: 300s)
-                $nextPenalty = min($penalty + 30, 300); // Cap at 5 minutes
+                $nextPenalty = min($penalty + 30, 300); // max 5 mins
                 Cache::put($key . ':penalty', $nextPenalty, now()->addMinutes(10));
-
-                // After lockout, only 1 attempt allowed
                 Cache::put($key . ':attempts', 1, now()->addMinutes(10));
 
                 return response()->json([
@@ -125,12 +123,11 @@ class AuthController extends Controller
             }
         }
 
-        // ✅ SUCCESS: Reset everything
+        // ✅ SUCCESS
         RateLimiter::clear($key);
         Cache::forget($key . ':attempts');
         Cache::forget($key . ':penalty');
 
-        // Generate and store token
         $accessToken = $passenger->createToken('passenger_token');
         $plainTextToken = $accessToken->plainTextToken;
         $hashedToken = hash('sha256', explode('|', $plainTextToken)[1]);
@@ -148,5 +145,6 @@ class AuthController extends Controller
             'passenger' => $passenger,
         ]);
     }
+
 
 }

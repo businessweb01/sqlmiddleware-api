@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Booking;
+use App\Models\Rider;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -163,6 +164,7 @@ class BookingController extends Controller
                     'lng' => $data['destinationCoordinates']['lng'],
                 ]),
                 'plate_number' => $data['plate_number'] ?? null,
+                'ratings' => $data['ratings'] ?? null,
                 'fare' => $data['fare'],
                 'no_of_luggage' => $data['luggageCount'],
                 'no_of_passenger' => (int) $data['numberofPassengers'],
@@ -184,10 +186,29 @@ class BookingController extends Controller
                         ? Carbon::createFromTimestampMs($data['cancelled_at_timestamp']) 
                         : now()),
             ];
-
+            
             Booking::create($booking);
+            
+            if (!is_null($data['ratings'])) {
+                $riderId = $data['assignedRider'];
+                
+                // Calculate the average rating for this rider
+                $averageRating = Booking::where('riderId', $riderId)
+                    ->whereNotNull('ratings')
+                    ->avg('ratings');
+                
+                // Option 1: Using Rider Model (Recommended)
+                Rider::where('riderId', $riderId)
+                    ->update(['rider_ratings' => round($averageRating, 2)]);
+                
+                // Option 2: Using DB facade (Alternative)
+                // DB::table('riders')
+                //     ->where('riderId', $riderId)
+                //     ->update(['rider_ratings' => round($averageRating, 2)]);
+            }
 
             return response()->json(['message' => 'Booking inserted']);
+
         }
 
 

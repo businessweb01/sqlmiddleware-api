@@ -30,6 +30,7 @@ class Rider extends Model
         'isLoggedin',
         'isOnline',
         'profile_pic_url',
+        'rider_ratings'
 
     ];
 

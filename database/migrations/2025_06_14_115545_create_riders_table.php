@@ -25,7 +25,9 @@ return new class extends Migration
             $table->boolean('rider_status')->default(0); // Unverified by default
             $table->boolean('isLoggedin')->default(0);
             $table->boolean('isOnline')->default(0);
-            $table->string('profile_pic_url');
+            $table->string('profile_pic_url')->nullable();
+            $table->string('userType')->default('Rider');
+            $table->decimal('rider_ratings', 3, 2)->nullable();
             $table->timestamps();
         });
     }

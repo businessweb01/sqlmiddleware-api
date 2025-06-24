@@ -21,7 +21,8 @@ return new class extends Migration
             $table->string('pass_email')->unique();
             $table->string('pass_pswrd');
             $table->string('pass_cont_num');
-            $table->string('profile_pic_url');
+            $table->string('profile_pic_url')->nullable();
+            $table->string('userType')->default('Passenger');
             $table->timestamps();
         });
     }
