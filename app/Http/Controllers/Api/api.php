@@ -16,7 +16,7 @@ use App\Http\Controllers\Api\fetchRiderInfo;
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::match(['post', 'put'], '/updatePassData',[PassengerProfileController::class, 'update']);
-Route::get('/rider/fetch-rider-info',[fetchRiderInfo::class, 'fetchRiderInfo']);
+Route::get('/fetch-rider-info',[fetchRiderInfo::class, 'fetchRiderInfo']);
 
 // Rider
 Route::post('/rider/register', [RiderAuthController::class, 'register']);

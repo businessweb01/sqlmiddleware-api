@@ -15,8 +15,8 @@ class BookingController extends Controller
     {
         try {
             // Get userId from request body
-            $userId = $request->input('userId');
-            
+             $userId = $request->query('userId'); // Works for GET, POST, etc.
+
             if (!$userId) {
                 return response()->json(['message' => 'userId is required'], 400);
             }
@@ -188,24 +188,6 @@ class BookingController extends Controller
             ];
             
             Booking::create($booking);
-            
-            if (!is_null($data['ratings'])) {
-                $riderId = $data['assignedRider'];
-                
-                // Calculate the average rating for this rider
-                $averageRating = Booking::where('riderId', $riderId)
-                    ->whereNotNull('ratings')
-                    ->avg('ratings');
-                
-                // Option 1: Using Rider Model (Recommended)
-                Rider::where('riderId', $riderId)
-                    ->update(['rider_ratings' => round($averageRating, 2)]);
-                
-                // Option 2: Using DB facade (Alternative)
-                // DB::table('riders')
-                //     ->where('riderId', $riderId)
-                //     ->update(['rider_ratings' => round($averageRating, 2)]);
-            }
 
             return response()->json(['message' => 'Booking inserted']);
 
