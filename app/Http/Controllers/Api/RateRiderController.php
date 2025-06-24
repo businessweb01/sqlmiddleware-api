@@ -16,8 +16,8 @@ class RateRiderController extends Controller
         try {
             // Validate the request
             $validator = Validator::make($request->all(), [
-                'bookingId' => 'required|string|exists:bookings,id',
-                'riderId' => 'required|string|exists:riders,id',
+                'bookingId' => 'required|string|exists:bookings,bookingId',
+                'riderId' => 'required|string|exists:riders,riderId',
                 'rating' => 'required|numeric|min:1|max:5',
                 'booked_date' => 'required|date'
             ]);
