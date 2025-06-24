@@ -11,13 +11,13 @@ use App\Http\Controllers\Api\PassengerProfileController;
 use App\Http\Controllers\Api\LogoutController;
 use App\Http\Controllers\Api\RiderOnlineController;
 use App\Http\Controllers\Api\fetchRiderInfo;
-
+use App\Http\Controllers\Api\RateRiderController;
 // Passenger
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::match(['post', 'put'], '/updatePassData',[PassengerProfileController::class, 'update']);
-Route::get('/rider/fetch-rider-info',[fetchRiderInfo::class, 'fetchRiderInfo']);
-
+Route::get('/fetch-rider-info', [fetchRiderInfo::class, 'fetchRiderInfo']);
+Route::match(['post', 'put'], '/rate-rider', [RateRiderController::class, 'RateRider']);
 // Rider
 Route::post('/rider/register', [RiderAuthController::class, 'register']);
 Route::post('/rider/login', [RiderAuthController::class, 'login']);
