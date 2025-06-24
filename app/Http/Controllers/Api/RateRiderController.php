@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers\Api;
+
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Booking;
@@ -8,6 +9,7 @@ use App\Models\Rider;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
+use Carbon\Carbon;
 
 class RateRiderController extends Controller
 {
@@ -17,6 +19,7 @@ class RateRiderController extends Controller
             // Validate the request
             $validator = Validator::make($request->all(), [
                 'bookingId' => 'required|string|exists:bookings,bookingId',
+                'passengerId' => 'required|string|exists:passengers,passengerId', // Added validation for passengerId
                 'riderId' => 'required|string|exists:riders,riderId',
                 'rating' => 'required|numeric|min:1|max:5',
                 'booked_date' => 'required|date'
@@ -30,11 +33,81 @@ class RateRiderController extends Controller
                 ], 422);
             }
 
+            // Extract input values
             $bookingId = $request->input('bookingId');
-            $passengerId = $request->input('passengerId'); // Added passengerId as you mentioned
+            $passengerId = $request->input('passengerId');
             $riderId = $request->input('riderId');
             $rating = $request->input('rating');
             $bookedDate = $request->input('booked_date');
+
+            // Check for Authorization Header
+            $authHeader = $request->header('Authorization');
+            if (!$authHeader || !Str::startsWith($authHeader, 'Bearer ')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Authorization header with Bearer token required'
+                ], 401);
+            }
+
+            // Extract raw token from Authorization header
+            $token = Str::after($authHeader, 'Bearer ');
+
+            // Split the token to get the second part (the raw token)
+            $parts = explode('|', $token);
+            if (count($parts) !== 2) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid token format'
+                ], 403);
+            }
+
+            $plainToken = $parts[1];
+            $hashedToken = hash('sha256', $plainToken);
+
+            // Verify token belongs to the passengerId
+            $tokenRecord = DB::table('personal_access_tokens')
+                ->where('tokenable_id', $passengerId)
+                ->where('token', $hashedToken)
+                ->orderByDesc('created_at')
+                ->first();
+
+            if (!$tokenRecord) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access: Invalid token for this user'
+                ], 401);
+            }
+
+            // Check if token is expired
+            if ($tokenRecord->expires_at && Carbon::parse($tokenRecord->expires_at)->isPast()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access: Token expired'
+                ], 401);
+            }
+
+            // Verify that the booking belongs to the authenticated passenger
+            $booking = DB::table('bookings')
+                ->where('bookingId', $bookingId)
+                ->where('passengerId', $passengerId)
+                ->where('riderId', $riderId)
+                ->where('booked_date', $bookedDate)
+                ->first();
+
+            if (!$booking) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Booking not found or you are not authorized to rate this booking'
+                ], 404);
+            }
+
+            // Check if booking has already been rated
+            if (!is_null($booking->ratings)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This booking has already been rated'
+                ], 400);
+            }
 
             // Start database transaction
             DB::beginTransaction();
@@ -42,6 +115,7 @@ class RateRiderController extends Controller
             // Update the ratings column in bookings table
             $bookingUpdated = DB::table('bookings')
                 ->where('bookingId', $bookingId)
+                ->where('passengerId', $passengerId)
                 ->where('riderId', $riderId)
                 ->where('booked_date', $bookedDate)
                 ->update(['ratings' => $rating]);
@@ -50,8 +124,8 @@ class RateRiderController extends Controller
                 DB::rollBack();
                 return response()->json([
                     'success' => false,
-                    'message' => 'Booking not found or unable to update rating'
-                ], 404);
+                    'message' => 'Unable to update booking rating'
+                ], 500);
             }
 
             // Calculate average rating for the rider
@@ -81,6 +155,7 @@ class RateRiderController extends Controller
                 'message' => 'Rider rated successfully',
                 'data' => [
                     'booking_id' => $bookingId,
+                    'passenger_id' => $passengerId,
                     'rider_id' => $riderId,
                     'rating' => $rating,
                     'average_rating' => round($avgRating, 2)
@@ -93,7 +168,7 @@ class RateRiderController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'An error occurred while rating the rider',
-                'error' => $e->getMessage()
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
             ], 500);
         }
     }
