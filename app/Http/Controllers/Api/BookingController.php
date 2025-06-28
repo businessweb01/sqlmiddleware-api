@@ -86,7 +86,6 @@ class BookingController extends Controller
                 $result = DB::table('bookings')
                     ->where('bookings.riderId', $userId)
                     ->orderByDesc('booked_date')
-                    ->limit(10)
                     ->select([
                         'bookingId',
                         'pickupDisplay_name as pickup_location',
