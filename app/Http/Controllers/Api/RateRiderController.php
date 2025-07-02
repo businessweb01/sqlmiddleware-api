@@ -19,9 +19,10 @@ class RateRiderController extends Controller
             // Validate the request
             $validator = Validator::make($request->all(), [
                 'bookingId' => 'required|string|exists:bookings,bookingId',
-                'passengerId' => 'required|string|exists:passengers,passengerId', // Added validation for passengerId
+                'passengerId' => 'required|string|exists:passengers,passengerId',
                 'riderId' => 'required|string|exists:riders,riderId',
                 'rating' => 'required|numeric|min:1|max:5',
+                'comment' => 'nullable|string|max:1000', // Added comment validation
                 'booked_date' => 'required|date'
             ]);
 
@@ -38,6 +39,7 @@ class RateRiderController extends Controller
             $passengerId = $request->input('passengerId');
             $riderId = $request->input('riderId');
             $rating = $request->input('rating');
+            $comment = $request->input('comment'); // Added comment input
             $bookedDate = $request->input('booked_date');
 
             // Check for Authorization Header
@@ -112,13 +114,19 @@ class RateRiderController extends Controller
             // Start database transaction
             DB::beginTransaction();
 
-            // Update the ratings column in bookings table
+            // Prepare update data
+            $updateData = ['ratings' => $rating];
+            if ($comment) {
+                $updateData['comment'] = $comment;
+            }
+
+            // Update the ratings and comment columns in bookings table
             $bookingUpdated = DB::table('bookings')
                 ->where('bookingId', $bookingId)
                 ->where('passengerId', $passengerId)
                 ->where('riderId', $riderId)
                 ->where('booked_date', $bookedDate)
-                ->update(['ratings' => $rating]);
+                ->update($updateData);
 
             if (!$bookingUpdated) {
                 DB::rollBack();
@@ -150,16 +158,23 @@ class RateRiderController extends Controller
             // Commit the transaction
             DB::commit();
 
+            // Prepare response data
+            $responseData = [
+                'booking_id' => $bookingId,
+                'passenger_id' => $passengerId,
+                'rider_id' => $riderId,
+                'rating' => $rating,
+                'average_rating' => round($avgRating, 2)
+            ];
+
+            if ($comment) {
+                $responseData['comment'] = $comment;
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Rider rated successfully',
-                'data' => [
-                    'booking_id' => $bookingId,
-                    'passenger_id' => $passengerId,
-                    'rider_id' => $riderId,
-                    'rating' => $rating,
-                    'average_rating' => round($avgRating, 2)
-                ]
+                'data' => $responseData
             ], 200);
 
         } catch (\Exception $e) {

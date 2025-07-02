@@ -28,6 +28,7 @@ return new class extends Migration
             $table->string('booking_status')->default('pending');
             $table->string('plate_number');
             $table->decimal('ratings', 3, 2)->nullable();
+            $table->string('comment')->nullable();
             $table->timestamps();
 
             // Optional FK if related tables have matching 20-char string keys
